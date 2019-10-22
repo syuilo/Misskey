@@ -16,6 +16,7 @@ import * as rename from 'gulp-rename';
 import * as mocha from 'gulp-mocha';
 import * as replace from 'gulp-replace';
 const uglifyes = require('uglify-es');
+import * as fs from 'fs';
 
 const locales = require('./locales');
 
@@ -50,7 +51,16 @@ gulp.task('build:copy:fonts', () =>
 	gulp.src('./node_modules/three/examples/fonts/**/*').pipe(gulp.dest('./built/client/assets/fonts/'))
 );
 
-gulp.task('build:copy', gulp.parallel('build:copy:views', 'build:copy:fonts', () =>
+gulp.task('build:copy:locales', cb => {
+	fs.mkdirSync('./built/client/assets/locales', { recursive: true });
+
+	for (const [lang, locale] of Object.entries(locales))
+		fs.writeFileSync(`./built/client/assets/locales/${lang}.json`, JSON.stringify(locale), 'utf-8');
+
+	cb();
+});
+
+gulp.task('build:copy', gulp.parallel('build:copy:views', 'build:copy:fonts', 'build:copy:locales', () =>
 	gulp.src([
 		'./src/const.json',
 		'./src/emojilist.json',
