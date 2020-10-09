@@ -1,5 +1,5 @@
 import $ from 'cafy';
-import es from '../../../../db/elasticsearch';
+import searchClient from '../../../../db/searchClient';
 import define from '../../define';
 import { Notes } from '../../../../models';
 import { In } from 'typeorm';
@@ -45,16 +45,18 @@ export const meta = {
 		userId: {
 			validator: $.optional.nullable.type(ID),
 			default: null
-		},
+		}
 	},
 
 	res: {
 		type: 'array' as const,
-		optional: false as const, nullable: false as const,
+		optional: false as const,
+		nullable: false as const,
 		items: {
 			type: 'object' as const,
-			optional: false as const, nullable: false as const,
-			ref: 'Note',
+			optional: false as const,
+			nullable: false as const,
+			ref: 'Note'
 		}
 	},
 
@@ -63,7 +65,7 @@ export const meta = {
 };
 
 export default define(meta, async (ps, me) => {
-	if (es == null) {
+	if (searchClient == null) {
 		const query = makePaginationQuery(Notes.createQueryBuilder('note'), ps.sinceId, ps.untilId)
 			.andWhere('note.text ILIKE :q', { q: `%${ps.query}%` })
 			.leftJoinAndSelect('note.user', 'user');
@@ -75,64 +77,22 @@ export default define(meta, async (ps, me) => {
 
 		return await Notes.packMany(notes, me);
 	} else {
-		const userQuery = ps.userId != null ? [{
-			term: {
-				userId: ps.userId
-			}
-		}] : [];
+		const hits = await searchClient.search(ps.query, {
+      userHost: ps.host,
+      userId: ps.userId
+    });
 
-		const hostQuery = ps.userId == null ?
-			ps.host === null ? [{
-				bool: {
-					must_not: {
-						exists: {
-							field: 'userHost'
-						}
-					}
-				}
-			}] : ps.host !== undefined ? [{
-				term: {
-					userHost: ps.host
-				}
-			}] : []
-		: [];
-
-		const result = await es.search({
-			index: config.elasticsearch.index || 'misskey_note',
-			body: {
-				size: ps.limit!,
-				from: ps.offset,
-				query: {
-					bool: {
-						must: [{
-							simple_query_string: {
-								fields: ['text'],
-								query: ps.query.toLowerCase(),
-								default_operator: 'and'
-							},
-						}, ...hostQuery, ...userQuery]
-					}
-				},
-				sort: [{
-					_doc: 'desc'
-				}]
-			}
-		});
-
-		const hits = result.body.hits.hits.map((hit: any) => hit._id);
-
-		if (hits.length === 0) return [];
-
-		// Fetch found notes
-		const notes = await Notes.find({
-			where: {
-				id: In(hits)
-			},
-			order: {
-				id: -1
-			}
-		});
-
-		return await Notes.packMany(notes, me);
+    if (hits.length === 0) return [];
+    
+    const notes = await Notes.find({
+      where: {
+        id: In(hits)
+      },
+      order: {
+        id: -1
+      }
+    });
+    
+    return await Notes.packMany(notes, me);
 	}
 });
