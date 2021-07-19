@@ -4,11 +4,18 @@ import { SwSubscriptions } from '../models';
 import { fetchMeta } from '@/misc/fetch-meta';
 import { PackedNotification } from '../models/repositories/notification';
 import { PackedMessagingMessage } from '../models/repositories/messaging-message';
+import { pushNotificationData } from '../types';
 
-type notificationType = 'notification' | 'unreadMessagingMessage';
-type notificationBody = PackedNotification | PackedMessagingMessage;
+type pushNotificationsTypes = {
+	'notification': PackedNotification;
+	'unreadMessagingMessage': PackedMessagingMessage;
+	'readNotifications': { notificationIds: string[] };
+	'readAllNotifications': undefined;
+	'readAllMessagingMessages': undefined;
+	'readAllMessagingMessagesOfARoom': { userId: string } | { groupId: string };
+};
 
-export default async function(userId: string, type: notificationType, body: notificationBody) {
+export async function pushNotification<T extends keyof pushNotificationsTypes>(userId: string, type: T, body: pushNotificationsTypes[T]) {
 	const meta = await fetchMeta();
 
 	if (!meta.enableServiceWorker || meta.swPublicKey == null || meta.swPrivateKey == null) return;
@@ -33,8 +40,8 @@ export default async function(userId: string, type: notificationType, body: noti
 		};
 
 		push.sendNotification(pushSubscription, JSON.stringify({
-			type, body
-		}), {
+			type, body, userId
+		} as pushNotificationData), {
 			proxy: config.proxy
 		}).catch((err: any) => {
 			//swLogger.info(err.statusCode);

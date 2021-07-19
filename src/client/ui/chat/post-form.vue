@@ -58,7 +58,6 @@ import { extractMentions } from '@/misc/extract-mentions';
 import { getAcct } from '@/misc/acct';
 import { formatTimeString } from '@/misc/format-time-string';
 import { Autocomplete } from '@client/scripts/autocomplete';
-import { noteVisibilities } from '../../../types';
 import * as os from '@client/os';
 import { selectFile } from '@client/scripts/select-file';
 import { notePostInterruptors, postFormActions } from '@client/store';

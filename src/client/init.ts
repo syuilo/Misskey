@@ -4,6 +4,15 @@
 
 import '@client/style.scss';
 
+//#region account indexedDB migration
+import { set } from '@client/scripts/idb-proxy';
+
+if (localStorage.getItem('accounts') != null) {
+	set('accounts', JSON.parse(localStorage.getItem('accounts')));
+	localStorage.removeItem('accounts');
+}
+//#endregion
+
 import * as Sentry from '@sentry/browser';
 import { Integrations } from '@sentry/tracing';
 import { computed, createApp, watch } from 'vue';
@@ -25,8 +34,10 @@ import { makeHotkey } from '@client/scripts/hotkey';
 import { search } from '@client/scripts/search';
 import { isMobile } from '@client/scripts/is-mobile';
 import { initializeSw } from '@client/scripts/initialize-sw';
-import { reloadChannel } from '@client/scripts/unison-reload';
+import { reload, reloadChannel } from '@client/scripts/unison-reload';
 import { reactionPicker } from '@client/scripts/reaction-picker';
+import { deleteLoginId } from '@client/scripts/login-id';
+import { getAccountFromId } from '@client/scripts/get-account-from-id';
 
 console.info(`Misskey v${version}`);
 
@@ -79,7 +90,7 @@ if (defaultStore.state.reportError && !_DEV_) {
 document.addEventListener('touchend', () => {}, { passive: true });
 
 // 一斉リロード
-reloadChannel.addEventListener('message', () => location.reload());
+reloadChannel.addEventListener('message', shouldRedirectToRoot => reload(shouldRedirectToRoot));
 
 //#region SEE: https://css-tricks.com/the-trick-to-viewport-units-on-mobile/
 // TODO: いつの日にか消したい
@@ -107,6 +118,25 @@ const html = document.documentElement;
 html.setAttribute('lang', lang);
 //#endregion
 
+//#region loginId
+const params = new URLSearchParams(location.href);
+const loginId = params.get('loginId');
+
+if (loginId) {
+	const target = deleteLoginId(location.toString());
+
+	if (!$i || $i.id !== loginId) {
+		const account = await getAccountFromId(loginId);
+		if (account) {
+			login(account.token, target);
+		}
+	}
+
+	history.replaceState({ misskey: 'loginId' }, '', target);
+}
+
+//#endregion
+
 //#region Fetch user
 if ($i && $i.token) {
 	if (_DEV_) {
@@ -130,7 +160,6 @@ if ($i && $i.token) {
 		try {
 			document.body.innerHTML = '<div>Please wait...</div>';
 			await login(i);
-			location.reload();
 		} catch (e) {
 			// Render the error screen
 			// TODO: ちゃんとしたコンポーネントをレンダリングする(v10とかのトラブルシューティングゲーム付きのやつみたいな)
